@@ -4,8 +4,6 @@ using System.Data;
 using System.Linq;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using System.Threading.Tasks;
-using NationalInstruments.Restricted;
 
 namespace OSCiLLOSCOPE
 {
@@ -20,12 +18,13 @@ namespace OSCiLLOSCOPE
         public double[] time;
 
         public AnalogMultiChannelReader reader;
-        public NationalInstruments.DAQmx.Task analogReadTask;
+        NationalInstruments.DAQmx.Task dTask;
         public IAsyncResult ar;
 
         //FORM INSTANCE
         public Form1()
         {
+
             InitializeComponent();
             //creating the Device combo box
             cbxDevice.Items.AddRange(DaqSystem.Local.Devices);
@@ -48,7 +47,7 @@ namespace OSCiLLOSCOPE
             {
                 cbxVoltageRange.SelectedIndex = 0;
             }
-            
+
             //Adding elements to the chart
             gphData.Titles.Add("Voltage Vs. Time");
             gphData.ChartAreas[0].AxisY.Title = "VOLTAGE (V)";
@@ -68,11 +67,10 @@ namespace OSCiLLOSCOPE
             btnUpdate(false);
 
             //Establishing Variables
-            int numChan = Convert.ToInt16(nudHighChan.Value) - Convert.ToInt16(nudLowChan.Value) + 1;
+            int numChan = Convert.ToInt32(nudHighChan.Value) - Convert.ToInt32(nudLowChan.Value) + 1;
             int numSamp = Convert.ToInt32(nudSampleChannel.Value);
             int sampleRate = Convert.ToInt32(nudSampleRate.Value);
             double[,] data = new double[numChan, numSamp];
-
 
             try
             {
@@ -80,8 +78,9 @@ namespace OSCiLLOSCOPE
                 while (gphData.Series.Count > 0) { gphData.Series.RemoveAt(0); }
 
                 // Create a new task
-                NationalInstruments.DAQmx.Task analogReadTask = new NationalInstruments.DAQmx.Task();     
-                
+                NationalInstruments.DAQmx.Task analogReadTask = new NationalInstruments.DAQmx.Task();
+                analogReadTask.SynchronizeCallbacks = true;
+
                 //creating channels and chart areas
                 for (int i = Convert.ToInt16(nudLowChan.Value); i < Convert.ToInt16(nudHighChan.Value + 1); ++i)
                 {
@@ -104,15 +103,15 @@ namespace OSCiLLOSCOPE
                     gphData.ChartAreas[0].AxisY.Minimum = Convert.ToDouble(cbxVoltageRange.Text) * -1.1;
                 }
                 //Setting the timing
-                analogReadTask.Timing.SampleClockRate = sampleRate;
-                analogReadTask.Timing.SamplesPerChannel = numSamp;
+                analogReadTask.Timing.ConfigureSampleClock("", sampleRate, SampleClockActiveEdge.Rising, SampleQuantityMode.ContinuousSamples);
+                //analogReadTask.Timing.SampleClockRate = sampleRate;
+                //analogReadTask.Timing.SamplesPerChannel = numSamp;
 
                 //creating the reader
                 reader = new AnalogMultiChannelReader(analogReadTask.Stream);
                 reader.BeginReadMultiSample(numSamp, new AsyncCallback(callback), null);
+                dTask = analogReadTask;
 
-                //Update the buttons
-                btnUpdate(true);
             }
             catch (DaqException exception)
             {
@@ -121,7 +120,7 @@ namespace OSCiLLOSCOPE
         }
 
         //Asynchronous Callback function
-        private void callback(IAsyncResult ar)
+        public void callback(IAsyncResult ar)
         {
             try
             {
@@ -137,7 +136,7 @@ namespace OSCiLLOSCOPE
                 double[] time = new double[numSamp];
                 for (int i = 0; i < numSamp; i++)
                 {
-                    time[i] = Convert.ToDouble(i + 1 / nudSampleRate.Value) / 1000;
+                    time[i] = Convert.ToDouble((i + 1) / nudSampleRate.Value);
                 }
 
                 // Adding data to graph
@@ -155,12 +154,22 @@ namespace OSCiLLOSCOPE
             }
             finally
             {
-                if (analogReadTask != null)
+                try
                 {
-                    analogReadTask.Dispose();
+                    DisposeTask(dTask);
+                    btnUpdate(true);
                 }
+                catch (Exception ex) { MessageBox.Show(ex.Message); }
+
             }
         }
+        //
+        static void DisposeTask(NationalInstruments.DAQmx.Task task)
+        {
+            task.Stop();
+            task.Dispose();
+        }
+
 
         //Update Button Function
         private void btnUpdate(bool a)
@@ -182,11 +191,14 @@ namespace OSCiLLOSCOPE
         //Updateing the front pannel numbers.
         private void updateNum()
         {
-            if ((nudSampleRate.Value * (nudHighChan.Value - nudLowChan.Value + 1)) > 250000)
+            int numChan = Convert.ToInt32(nudHighChan.Value) - Convert.ToInt32(nudLowChan.Value) + 1;
+            int numSamp = Convert.ToInt32(nudSampleChannel.Value);
+            int sampleRate = Convert.ToInt32(nudSampleRate.Value);
+            if ((sampleRate * numChan) > 250000) // AD RATE LIMITER
             {
-                nudSampleRate.Value = 250000 / (nudHighChan.Value - nudLowChan.Value + 1);
+                nudSampleRate.Value = 250000 / (numChan);
             }
-            if (nudSampleChannel.Value / (nudSampleRate.Value * (nudHighChan.Value - nudLowChan.Value + 1)) > 9)
+            if (numSamp / sampleRate > 9) // MAX TIME LIMITER
 
             {
                 nudSampleChannel.Value = 9 * (nudSampleRate.Value);

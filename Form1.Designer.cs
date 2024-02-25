@@ -242,7 +242,7 @@
             // 
             this.nudSampleChannel.Location = new System.Drawing.Point(258, 206);
             this.nudSampleChannel.Maximum = new decimal(new int[] {
-            100000,
+            22250000,
             0,
             0,
             0});
@@ -323,7 +323,7 @@
             this.gphData.ChartAreas.Add(chartArea1);
             legend1.Name = "Legend1";
             this.gphData.Legends.Add(legend1);
-            this.gphData.Location = new System.Drawing.Point(561, 33);
+            this.gphData.Location = new System.Drawing.Point(555, 33);
             this.gphData.Name = "gphData";
             this.gphData.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.Fire;
             this.gphData.Size = new System.Drawing.Size(537, 427);
